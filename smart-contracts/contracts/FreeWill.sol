@@ -73,13 +73,13 @@ contract FreeWillStorage {
 
     uint256 public ethSupply;
 
-    address[] public allTokens;
+    address[] internal allTokens;
     
-    // Supply APY 4%
-    uint public supplyInterestRate = 40;
+    // Supply APY 15%
+    uint public supplyInterestRate = 150;
 
-    // Borrow APY 10%
-    uint public borrowInterestRate = 100;
+    // Borrow APY 30%
+    uint public borrowInterestRate = 300;
 
     // User can borrow 60% of thier collatoral value
     uint public collatoralFactor = 600;
@@ -93,6 +93,15 @@ contract FreeWill is Ownable, FreeWillStorage {
     IFreeWillSwap fwSwap;
     IFreeWillToken fwt;
 
+    event EthDeposit(address indexed user, uint256 amount);
+    event EthWithdraw(address indexed user, uint256 amount);
+    event TokenDeposit(address indexed user, address indexed token, uint256 amount);
+    event TokenWithdraw(address indexed user, address indexed token, uint256 amount);
+    event BorrowEther(address indexed user, uint256 amount);
+    event RepayEther(address indexed user, uint256 amount);
+    event BorrowToken(address indexed user, address indexed token, uint256 amount);
+    event RepayToken(address indexed user, address indexed token, uint256 amount);
+    event ClaimInterest(address indexed user, uint256 interest);
 
     constructor(address fEther, address _FUSD, IFreeWillSwap _fwSwap, IFreeWillToken _fwt) {
         fEth = fEtherInterface(fEther);
@@ -101,47 +110,145 @@ contract FreeWill is Ownable, FreeWillStorage {
         fwt = _fwt;
     }
 
+    function getAllTokens() public view returns (address[] memory _allTokens) {
+        _allTokens = allTokens;
+    }
+
+    function getBalanceOfTokenSupplied(address user, address token) public view returns (uint256 balance) {
+        balance = users[user].suppliedTokens[token];
+    }
+
+    function getBalanceOfEthSupplied(address user) public view returns (uint256 balance) {
+        balance = users[user].suppliedEther;
+    }
+
+    function getBalanceOfEthBorrowed(address user) public view returns (uint256 balance) {
+        balance = users[user].ethBorrow.borrowedAmount;
+    }
+
+    function getBalanceOfTokenBorrowed(address user, address token) public view returns (uint256 balance) {
+        balance = users[user].borrows[token].borrowedAmount;
+    }
+
+    function getUnlockedEthAmount(address user) public view returns (uint256 amount) {
+        amount = users[user].unlockedEther;
+    }
+
+    function getUnlockedTokenAmount(address user, address token) public view returns (uint256 amount) {
+        amount = users[user].unlockedTokens[token];
+    }
+
+    function getInterestEarned() public view returns (uint256 interest) {
+        uint256 interestValue;
+        address fusd = FUSD;
+        address user = msg.sender;
+        uint256 ethValue;
+        uint256 ethAmount = users[user].suppliedEther;
+        if(ethAmount > 0) {
+            ethValue = fwSwap.getPriceEth(fusd, ethAmount);
+        }
+        uint256 tokensValue;
+        for(uint i; i < users[user].suppliedTokenList.length; i++) {
+            address token = users[user].suppliedTokenList[i];
+            uint256 amount = users[user].suppliedTokens[token];
+            if(amount == 0) {
+                continue;
+            }
+            tokensValue += fwSwap.getPrice(fusd, token, amount);
+        }
+        interestValue = ((ethValue + tokensValue)
+                   * (block.timestamp - users[user].lastSupplyTimeStamp)
+                   * supplyInterestRate)
+                   / (365 * 24 * 60 * 60 * 1000 * 1000);
+        if(interestValue > 0) {
+            interest = fwSwap.getPrice(address(fwt), fusd, interestValue);
+        }
+        interest += users[user].interestEarned;
+    }
+
+    function getInterestOwedEth() public view returns (uint256 interest) {
+        uint256 interestValue;
+        address fusd = FUSD;
+        address user = msg.sender;
+        uint256 ethValue;
+        uint256 ethAmount = users[user].ethBorrow.borrowedAmount;
+        if(ethAmount > 0) {
+            ethValue = fwSwap.getPriceEth(fusd, ethAmount);
+            interestValue = (ethValue * (block.timestamp - users[user].lastBorrowTimeStamp) * borrowInterestRate)
+                        / (365 * 24 * 60 * 60 * 1000 * 1000);
+            interest = fwSwap.getPrice(address(fwt), fusd, interestValue);
+        }
+        interest += users[user].ethBorrow.interestOwed;
+        
+    }
+
+    function getInterestOwed(address token) public view returns (uint256 interest) {
+        uint256 interestValue;
+        uint256 tokensValue;
+        address fusd = FUSD;
+        address user = msg.sender;
+        uint256 amount = users[user].borrows[token].borrowedAmount;
+        if(amount > 0) {
+            tokensValue = fwSwap.getPrice(fusd, token, amount);
+            interestValue = (tokensValue * (block.timestamp - users[user].lastBorrowTimeStamp) * borrowInterestRate)
+                        / (365 * 24 * 60 * 60 * 1000 * 1000);
+            interest = fwSwap.getPrice(address(fwt), fusd, interestValue);
+            
+        }
+        interest += users[user].borrows[token].interestOwed;
+    }
+
     function depositEth() public payable {
         address user = msg.sender;
         uint256 amount = msg.value;
+        updateInterestEarned(user);
         users[user].suppliedEther += amount;
         users[user].unlockedEther += amount;
         ethSupply += msg.value;
         fEth.mint(user, msg.value);
-        updateInterestEarned(user);
+        emit EthDeposit(user, amount);
     }
 
     function withdrawEth(uint256 amount) public {
         address user = msg.sender;
         require(users[user].unlockedEther >= amount, "FreeWill: Can't withdraw locked amount");
+        updateInterestEarned(user);
         users[user].suppliedEther -= amount;
         users[user].unlockedEther -= amount;
         ethSupply -= amount;
-        fEth.burn(amount);
+        fEth.burn(user,amount);
         payable(user).transfer(amount);
-        updateInterestEarned(user);
+        emit EthWithdraw(user, amount);
     }
 
     function depositTokens(address token, uint256 amount) public {
         address user = msg.sender;
+        updateInterestEarned(user);
         IERC20(token).transferFrom(user, address(this), amount);
         users[user].suppliedTokens[token] += amount;
         users[user].unlockedTokens[token] += amount;
         tokenSupply[token] += amount;
+        address[] memory suppliedTokensList = users[user].suppliedTokenList;
+        bool tokenExist = doesTokenExistInList(token, suppliedTokensList);
+        if(!tokenExist) {
+            users[user].suppliedTokenList.push(token);
+        }
         fTokenInterface ftoken = fTokenInterface(fTokenAddress[token]);
         ftoken.mint(user, amount);
-        updateInterestEarned(user);
+        emit TokenDeposit(user, token, amount);
     }
 
     function withdrawTokens(address token, uint256 amount) public {
         address user = msg.sender;
         require(users[user].unlockedTokens[token] >= amount, "FreeWill: Can't withdraw locked amount");
+        updateInterestEarned(user);
         fTokenInterface ftoken = fTokenInterface(fTokenAddress[token]);
         ftoken.burn(user, amount);
         users[user].suppliedTokens[token] -= amount;
+        users[user].unlockedTokens[token] -= amount;
         tokenSupply[token] -= amount;
         IERC20(token).transfer(user, amount);
-        updateInterestEarned(user);
+        emit TokenWithdraw(user, token, amount);
     }
 
     function borrowEth(
@@ -151,10 +258,10 @@ contract FreeWill is Ownable, FreeWillStorage {
     ) public {
         require(ethSupply > amount, "FreeWill: Insufficient Supply");
         uint256 collatoralValue = getValue(tokens, amounts, 0);   
-        uint256 ethPrice = fwSwap.getPriceEth(FUSD);
-        uint256 ethValue = amount * ethPrice;
+        uint256 ethValue = fwSwap.getPriceEth(FUSD, amount);
         require((collatoralValue * collatoralFactor) / 1000 >= ethValue, "FreeWill: Not enough collatoral");
         address user = msg.sender;
+        updateInterestOwed(user);
         ethSupply -= amount;
         users[user].ethBorrow.borrowedAmount += amount;
         for(uint i; i < tokens.length; i++) {
@@ -164,7 +271,7 @@ contract FreeWill is Ownable, FreeWillStorage {
             addCollatoralTokenForEth(user, tokens[i]);
         }
         payable(user).transfer(amount);
-        updateInterestOwed(user);
+        emit BorrowEther(user, amount);
     }
 
     function addCollatoralTokenForEth(address user, address collatoralToken) private {
@@ -188,22 +295,28 @@ contract FreeWill is Ownable, FreeWillStorage {
     ) public {
         require(tokenSupply[token] > amount, "FreeWill: Insufficient token supply");
         uint256 collatoralValue = getValue(tokens, amounts, ethAmount);
-        uint256 tokenPrice = fwSwap.getPrice(FUSD, token);
-        uint256 tokenValue = amount * tokenPrice;
+        uint256 tokenValue = fwSwap.getPrice(FUSD, token, amount);
         require((collatoralValue * collatoralFactor) / 1000 >= tokenValue, "FreeWill: Not enough collatoral");
         tokenSupply[token] -= amount;
         address user = msg.sender;
-        require(users[user].unlockedEther > ethAmount, "FreeWill: Not enough Ether");
+        updateInterestOwed(user);
+        require(users[user].unlockedEther >= ethAmount, "FreeWill: Not enough Ether");
         users[user].unlockedEther -= ethAmount;
+        users[user].borrows[token].collatoralEther += ethAmount;
         users[user].borrows[token].borrowedAmount += amount;
+        address[] memory borrowedTokensList = users[user].borrowedTokenList;
+        bool tokenExist = doesTokenExistInList(token, borrowedTokensList);
+        if(!tokenExist) {
+            users[user].borrowedTokenList.push(token);
+        }
         for(uint i; i < tokens.length; i++) {
             require(users[user].unlockedTokens[tokens[i]] >= amounts[i], "FreeWill: Not enough tokens");
             users[user].borrows[token].collatoralAmounts[tokens[i]] += amounts[i];
-            users[user].unlockedTokens[token] -= amounts[i];
+            users[user].unlockedTokens[tokens[i]] -= amounts[i];
             addCollatoralToken(user, token, tokens[i]);
         }
         IERC20(token).transfer(user, amount);
-        updateInterestOwed(user);
+        emit BorrowToken(user, token, amount);
     }
 
     // @param user: msg.sender
@@ -217,55 +330,63 @@ contract FreeWill is Ownable, FreeWillStorage {
             }
         }
         if(!tokenExist) {
-            users[user].ethBorrow.collatoralTokensList.push(collatoralToken);
+            users[user].borrows[token].collatoralTokensList.push(collatoralToken);
         }
+    }
+
+    function doesTokenExistInList(address token, address[] memory list) private pure returns (bool) {
+        bool tokenExist;
+        for(uint i; i < list.length; i++) {
+            if(list[i] == token) {
+                tokenExist = true;
+            }
+        }
+        return tokenExist;
     }
 
     function getValue(
         address[] memory tokens,
         uint256[] memory amounts,
         uint256 ethAmount
-    ) internal view returns (uint256 value) {
-        uint256 price;
+    ) public view returns (uint256 value) {
         address fusd = FUSD;
         for(uint i; i < tokens.length; i++) {
             if(tokens[i] == fusd) {
                 value += amounts[i];
             } else {
-                price = fwSwap.getPrice(fusd, tokens[i]);
-                value += amounts[i] * price;
+                value += fwSwap.getPrice(fusd, tokens[i], amounts[i]);
             }
         }
         if(ethAmount > 0) {
-            value += ethAmount * fwSwap.getPriceEth(fusd);
+            value += fwSwap.getPriceEth(fusd, ethAmount);
         }
     }
 
-    function getUnlockedAmountsValue(address user) internal view returns (uint256 value) {
+    function getUnlockedAmountsValue(address user) public view returns (uint256 value) {
         address[] memory userTokens = users[user].suppliedTokenList;
-        uint256 price;
         address fusd = FUSD;
         for(uint i; i < userTokens.length; i++) {
             if(userTokens[i] == fusd) {
                 value += users[user].unlockedTokens[userTokens[i]];
             } else {
-                price = fwSwap.getPrice(fusd, userTokens[i]);
-                value += users[user].unlockedTokens[userTokens[i]] * price;
+                value += fwSwap.getPrice(fusd, userTokens[i], users[user].unlockedTokens[userTokens[i]]);
             }
         }
-        uint256 ethPrice = fwSwap.getPriceEth(fusd);
-        value += users[user].unlockedEther * ethPrice;
+        value += fwSwap.getPriceEth(fusd, users[user].unlockedEther);
     }
 
     function addToken(address token, address fToken) public onlyOwner {
         address actualToken = fTokenInterface(fToken).actualToken();
         require(actualToken == token, "FreeWill: fToken contract not belongs to this token");
+        fTokenAddress[token] = fToken;
         allTokens.push(token);
     }
 
     function repayEth() public payable {
         address user = msg.sender;
-        require(msg.value >= users[user].ethBorrow.borrowedAmount, "FreeWill: Pay full amount");
+        uint256 amount = users[user].ethBorrow.borrowedAmount;
+        require(msg.value >= amount, "FreeWill: Pay full amount");
+        updateInterestOwed(user);
         IERC20(address(fwt)).transferFrom(user, address(this), users[user].ethBorrow.interestOwed);
         uint collatoralTokensLength = users[user].ethBorrow.collatoralTokensList.length;
         for(uint i; i < collatoralTokensLength; i++) {
@@ -273,7 +394,9 @@ contract FreeWill is Ownable, FreeWillStorage {
             users[user].unlockedTokens[tkn] += users[user].ethBorrow.collatoralAmounts[tkn];
             delete users[user].ethBorrow.collatoralAmounts[tkn];
         }
+        ethSupply -= amount;
         delete users[user].ethBorrow;
+        emit RepayEther(user, amount);
     }
 
     function repayTokens(address token, uint256 amount) public {
@@ -281,14 +404,17 @@ contract FreeWill is Ownable, FreeWillStorage {
         uint256 borrowedAmount = users[user].borrows[token].borrowedAmount;
         require(amount >= borrowedAmount, "FreeWill: Pay full amount");
         IERC20(token).transferFrom(user, address(this), borrowedAmount);
+        updateInterestOwed(user);
         IERC20(address(fwt)).transferFrom(user, address(this), users[user].borrows[token].interestOwed);
         for(uint i; i < users[user].borrows[token].collatoralTokensList.length; i++) {
             address tkn = users[user].borrows[token].collatoralTokensList[i];
             users[user].unlockedTokens[tkn] += users[user].borrows[token].collatoralAmounts[tkn];
             delete users[user].borrows[token].collatoralAmounts[tkn];
         }
+        tokenSupply[token] += borrowedAmount;
         users[user].unlockedEther += users[user].borrows[token].collatoralEther;
         delete users[user].borrows[token];
+        emit RepayToken(user, token, amount);
     }
 
     function adjustCollatoralsOfTokens(
@@ -300,13 +426,13 @@ contract FreeWill is Ownable, FreeWillStorage {
         (uint256 oldEthAmount, address[] memory oldTokens, uint256[] memory oldAmounts) = getCollatoralsOfToken(token);
         require(
             getValue(tokens, amounts, ethAmount) >= getValue(oldTokens, oldAmounts, oldEthAmount),
-            "FreeWill: New collatoral amounts should more or equal"
+            "FreeWill: New collatoral amounts should be more or equal"
         );
         address user = msg.sender;
         for(uint i; i < tokens.length; i++) {
             if(amounts[i] > users[user].borrows[token].collatoralAmounts[tokens[i]]) {
                 uint256 amountIncreased = amounts[i] - users[user].borrows[token].collatoralAmounts[tokens[i]];
-                require(amountIncreased >= users[user].unlockedTokens[tokens[i]], "FreeWill: Insufficient tokens");
+                require(amountIncreased <= users[user].unlockedTokens[tokens[i]], "FreeWill: Insufficient tokens");
                 users[user].unlockedTokens[tokens[i]] -= amountIncreased;
                 users[user].borrows[token].collatoralAmounts[tokens[i]] += amountIncreased;
                 addCollatoralToken(user, token, tokens[i]);
@@ -332,13 +458,13 @@ contract FreeWill is Ownable, FreeWillStorage {
         (address[] memory oldTokens, uint256[] memory oldAmounts) = getCollatoralsOfEth();
         require(
             getValue(tokens, amounts, 0) >= getValue(oldTokens, oldAmounts, 0),
-            "FreeWill: New collatoral amounts should more or equal"
+            "FreeWill: New collatoral amounts should be more or equal"
         );
         address user = msg.sender;
         for(uint i; i < tokens.length; i++) {
             if(amounts[i] > users[user].ethBorrow.collatoralAmounts[tokens[i]]) {
                 uint256 amountIncreased = amounts[i] - users[user].ethBorrow.collatoralAmounts[tokens[i]];
-                require(amountIncreased >= users[user].unlockedTokens[tokens[i]], "FreeWill: Insufficient tokens");
+                require(amountIncreased <= users[user].unlockedTokens[tokens[i]], "FreeWill: Insufficient tokens");
                 users[user].unlockedTokens[tokens[i]] -= amountIncreased;
                 users[user].ethBorrow.collatoralAmounts[tokens[i]] += amountIncreased;
                 addCollatoralTokenForEth(user, tokens[i]);
@@ -382,19 +508,25 @@ contract FreeWill is Ownable, FreeWillStorage {
         uint256 ethValue;
         uint256 ethAmount = users[user].suppliedEther;
         if(ethAmount > 0) {
-            ethValue = ethAmount * fwSwap.getPriceEth(fusd);
+            ethValue = fwSwap.getPriceEth(fusd, ethAmount);
         }
         uint256 tokensValue;
         for(uint i; i < users[user].suppliedTokenList.length; i++) {
             address token = users[user].suppliedTokenList[i];
-            tokensValue += users[user].suppliedTokens[token] * fwSwap.getPrice(fusd, token);
+            uint256 amount = users[user].suppliedTokens[token];
+            if(amount == 0) {
+                continue;
+            }
+            tokensValue += fwSwap.getPrice(fusd, token, amount);
         }
         interestValue = ((ethValue + tokensValue)
                    * (block.timestamp - users[user].lastSupplyTimeStamp)
                    * supplyInterestRate)
                    / (365 * 24 * 60 * 60 * 1000 * 1000);
-        interest = interestValue / fwSwap.getPrice(fusd, address(fwt));
-        users[user].interestEarned += interest;
+        if(interestValue > 0) {
+            interest = fwSwap.getPrice(address(fwt), fusd, interestValue);
+            users[user].interestEarned += interest;
+        }
         users[user].lastSupplyTimeStamp = block.timestamp;
     }
 
@@ -404,31 +536,36 @@ contract FreeWill is Ownable, FreeWillStorage {
         address fusd = FUSD;
         uint256 ethValue;
         uint256 ethAmount = users[user].ethBorrow.borrowedAmount;
-        uint256 fwtPrice = fwSwap.getPrice(fusd, address(fwt));
         if(ethAmount > 0) {
-            ethValue = ethAmount * fwSwap.getPriceEth(fusd);
+            ethValue = fwSwap.getPriceEth(fusd, ethAmount);
             interestValue = (ethValue * (block.timestamp - users[user].lastBorrowTimeStamp) * borrowInterestRate)
                         / (365 * 24 * 60 * 60 * 1000 * 1000);
-            interest = interestValue / fwtPrice;
+            interest = fwSwap.getPrice(address(fwt), fusd, interestValue);
             users[user].ethBorrow.interestOwed += interest;
         }
         uint256 tokensValue;
         for(uint i; i < users[user].borrowedTokenList.length; i++) {
             address token = users[user].borrowedTokenList[i];
-            tokensValue += users[user].borrows[token].borrowedAmount * fwSwap.getPrice(fusd, token);
+            uint256 amount = users[user].borrows[token].borrowedAmount;
+            if(amount == 0) {
+                continue;
+            }
+            tokensValue = fwSwap.getPrice(fusd, token, amount);
             interestValue = (tokensValue * (block.timestamp - users[user].lastBorrowTimeStamp) * borrowInterestRate)
                         / (365 * 24 * 60 * 60 * 1000 * 1000);
-            interest = interestValue / fwtPrice;
+            interest = fwSwap.getPrice(address(fwt), fusd, interestValue);
             users[user].borrows[token].interestOwed += interest;
         }
         users[user].lastBorrowTimeStamp = block.timestamp;
     }
 
-    function claimInterest() public returns (uint256) {
+    function claimInterest() public {
         address user = msg.sender;
+        updateInterestEarned(user);
         uint256 interest = users[user].interestEarned;
+        users[user].interestEarned = 0;
         fwt.mint(user, interest);
-        return interest;
+        emit ClaimInterest(user, interest);
     }
 
 }

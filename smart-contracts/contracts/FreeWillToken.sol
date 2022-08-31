@@ -8,7 +8,7 @@ contract FreeWillToken is ERC20, AccessControl {
 
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
-    constructor() ERC20("FreeWillToken", "FWT") {
+    constructor() ERC20("FreeWill Token", "FWT") {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MINTER_ROLE, msg.sender);
         _mint(_msgSender(), 1000 * (10**18));
@@ -20,6 +20,10 @@ contract FreeWillToken is ERC20, AccessControl {
 
     function burn(address from, uint256 amount) public onlyRole(MINTER_ROLE) {
         _burn(from, amount);
+    }
+
+    function addMinterRole(address account) public onlyRole(getRoleAdmin(MINTER_ROLE)) {
+        grantRole(MINTER_ROLE, account);
     }
 
 }

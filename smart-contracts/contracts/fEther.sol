@@ -6,14 +6,20 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 contract fEther is ERC20 {
 
     address minter;
+    address owner;
     
     modifier onlyMinter {
         require(msg.sender == minter, "fEther: FORBIDDEN");
         _;
     }
 
-    constructor(address _minter) ERC20("fEther", "fETH") {
-        minter = _minter;
+    modifier onlyOwner {
+        require(msg.sender == owner, "fEther: FORBIDDEN");
+        _;
+    }
+
+    constructor() ERC20("fEther", "fETH") {
+        owner = msg.sender;
     }
 
     function mint(address to, uint256 amount) public onlyMinter {
@@ -22,6 +28,10 @@ contract fEther is ERC20 {
 
     function burn(address account, uint256 amount) public onlyMinter {
         _burn(account, amount);
+    }
+
+    function setMinter(address _minter) public {
+        minter = _minter;
     }
     
 }

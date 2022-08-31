@@ -9,7 +9,7 @@ interface fEtherInterface {
 
     function mint(address to, uint256 amount) external;
 
-    function burn(uint256 amount) external;
+    function burn(address account, uint256 amount) external;
 
     function totalSupply() external view returns (uint256);
 
