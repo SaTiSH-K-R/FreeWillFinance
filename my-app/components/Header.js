@@ -75,7 +75,7 @@ export default function Header() {
 							</MenuItem>
 							<MenuItem onClick={handleCloseNavMenu}>
 								<Link
-									href="https://github.com/SaTiSH-K-R/FreeWillSwap"
+									href="https://github.com/SaTiSH-K-R/FreeWillFinance"
 									underline="hover"
 									sx={{color: '#00D4D4'}}
 									target='_blank'
@@ -131,7 +131,7 @@ export default function Header() {
 						}}
 					>
 						<Link
-							href="https://github.com/SaTiSH-K-R/FreeWillSwap"
+							href="https://github.com/SaTiSH-K-R/FreeWillFinance"
 							underline="hover"
 							sx={{color: 'white'}}
 							target='_blank'
