@@ -88,8 +88,8 @@ export default function Home() {
           mt={2}
           sx={{ color: 'gray' }}
         >
-          A DeFi where you can lend, borrow, provide multiple assets as collatorals
-          and customize the amounts of collatorals later.
+          A DeFi where you can lend, borrow, provide multiple assets as collaterals
+          and customize the amounts of collaterals later.
         </Typography>
       </Stack>
       <Grid

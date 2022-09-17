@@ -232,7 +232,7 @@ export default function BorrowDialog(props) {
       return
     }
     if(collatoralValue.lt(minCollatoralValue)) {
-      window.alert('Enter sufficient collatoral')
+      window.alert('Enter sufficient collateral')
       return
     }
     let colTokens = []
@@ -364,7 +364,7 @@ export default function BorrowDialog(props) {
       return
     }
     if(newCollatoralValue.lt(minCollatoralValue)) {
-      window.alert('Enter sufficient collatoral')
+      window.alert('Enter sufficient collateral')
       return
     }
     let colTokens = []
@@ -406,7 +406,7 @@ export default function BorrowDialog(props) {
     dispatch({
       type: 'success',
       title: 'Transaction Completed',
-      message: 'Collatorals adjusted',
+      message: 'Collaterals adjusted',
       position: 'topR'
     })
     updateData()
@@ -419,7 +419,7 @@ export default function BorrowDialog(props) {
     dispatch({
       type: 'error',
       title: 'Transaction Failed',
-      message: 'Collatoral adjusting Failed',
+      message: 'Collateral adjusting Failed',
       position: 'topR'
     })
   }
@@ -464,7 +464,7 @@ export default function BorrowDialog(props) {
               <TabList onChange={handleTabChange} aria-label="Borrow Dialog" centered>
                 <Tab label="Borrow" value="1"/>
                 <Tab label="Repay" value="2"/>
-                <Tab label="Adjust Collatoral" value="3" wrapped/>
+                <Tab label="Adjust Collateral" value="3" wrapped/>
               </TabList>
             </ThemeProvider>
           </Box>
@@ -515,12 +515,12 @@ export default function BorrowDialog(props) {
             </Stack>
             <Divider orientation="horizontal" sx={{mx: -3}}/>
             <Stack alignItems='center' color='#005C50'>
-              <Typography>Collatorals</Typography>
+              <Typography>Collaterals</Typography>
             </Stack>
             <Divider orientation="horizontal" sx={{mx: -3}}/>
             <Stack m={1} alignItems='center'>
               <Typography variant='caption'>
-                {`Sum of collatoral amount value must be > `}
+                {`Sum of collateral amount value must be > `}
                 <Typography variant='caption' color='green'>
                   {`$${utils.formatEther(minCollatoralValue.sub(minCollatoralValue.mod(1e15)))}`}
                 </Typography>
@@ -608,7 +608,7 @@ export default function BorrowDialog(props) {
             })}
             <Stack alignItems='center' mt={2}>
               <Typography variant="caption">
-                Sum of Collatoral values: 
+                Sum of Collateral values: 
                 <Typography variant="caption" color={collatoralValue.lt(minCollatoralValue) ? 'red' : 'green'}>
                   {` $${utils.formatEther(collatoralValue.sub(collatoralValue.mod(1e15)))}`}
                 </Typography>
@@ -667,15 +667,15 @@ export default function BorrowDialog(props) {
             </Stack>
             <Divider orientation="horizontal" sx={{mx: -3}}/>
             <Stack alignItems='center' color='#005C50'>
-              <Typography>Collatorals</Typography>
+              <Typography>Collaterals</Typography>
             </Stack>
             <Divider orientation="horizontal" sx={{mx: -3}}/>
             <Stack alignItems='center' mt={1}>
-              <Typography variant='subtitle2'>Adjust collatoral amounts by increasing or decreasing</Typography>
+              <Typography variant='subtitle2'>Adjust collateral amounts by increasing or decreasing</Typography>
             </Stack>
             <Stack m={1} alignItems='center'>
               <Typography variant='caption'>
-                {`Sum of collatoral amount value must be > `}
+                {`Sum of collateral amount value must be > `}
                 <Typography variant='caption' color='green'>
                   {`$${utils.formatEther(currentCollatoralValue.sub(currentCollatoralValue.mod(1e15)))}`}
                 </Typography>
@@ -689,7 +689,7 @@ export default function BorrowDialog(props) {
                       {`Available amount: ${utils.formatEther(tkn.unlocked.sub(tkn.unlocked.mod(1e12)))} ${tkn.symbol}`}
                     </Typography>
                     <Typography variant='caption' sx={{pl: 1}}>
-                      {`Current Collatoral: ${(() => {
+                      {`Current Collateral: ${(() => {
                         const t = currentCollatorals?.find(tk => tkn.address.toLowerCase() === tk.address.toLowerCase())
                         if(t == undefined) {
                           return '0.0'
@@ -775,7 +775,7 @@ export default function BorrowDialog(props) {
             })}
             <Stack alignItems='center' mt={2}>
               <Typography variant="caption">
-                Sum of Collatoral values: 
+                Sum of Collateral values: 
                 <Typography variant='caption' color={newCollatoralValue.lt(currentCollatoralValue) ? 'red' : 'green'}>
                   {` $${utils.formatEther(newCollatoralValue.sub(newCollatoralValue.mod(1e15)))}`}
                 </Typography>

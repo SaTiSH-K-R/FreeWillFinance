@@ -31,7 +31,7 @@ export default function Header() {
 					severity='warning'
 					sx={{justifyContent: 'center', borderRadius: 0}}
 				>
-					Switch to LocalDev chain
+					Switch to Goerli Testnet
 				</Alert>
 			}
 				<Toolbar>
