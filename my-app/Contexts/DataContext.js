@@ -28,7 +28,7 @@ const DataProvider = ({children}) => {
   }, [isWeb3Enabled, account, chainId])
   
   const getTVL = async () => {
-    const provider = new ethers.providers.AlchemyProvider('goerli')
+    const provider = new ethers.providers.JsonRpcProvider(process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_URL, 'goerli')
     const freeWillContract = new ethers.Contract(FREE_WILL_ADDRESS, FREE_WILL_ABI, provider)
     const tokens = await freeWillContract.getAllTokens()
     const ethSupply = await freeWillContract.ethSupply()
@@ -43,7 +43,7 @@ const DataProvider = ({children}) => {
   }
   
   const getMarkets = async () => {
-    const provider = new ethers.providers.AlchemyProvider('goerli')
+    const provider = new ethers.providers.JsonRpcProvider(process.env.NEXT_PUBLIC_ALCHEMY_API_KEY_URL, 'goerli')
     const freeWillContract = new ethers.Contract(FREE_WILL_ADDRESS, FREE_WILL_ABI, provider)
     const tokens = await freeWillContract.getAllTokens()
     const ethLiquidity = await freeWillContract.ethSupply()
